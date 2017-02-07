@@ -14,12 +14,15 @@ metadata list = NULL;
 
 /* Function find_first_free: This function searches the metadata for the
 first free block of space that is free */
-metadata find_first_free(metadata curr, size_t s ){
+metadata find_first_free(metadata start, size_t s ){
 	metadata b = list;
 	printf("starting fff @ %p \n",b);
 	while (b != NULL){
 		if(b->free && b->size >= (s + sizeof(metadata))) {
 			return b;
+		}
+		if(b->next == NULL){
+			break;
 		}
 		printf("b->next: %p , b->free = %u \n",b,b->free);
 		b = b->next;
@@ -83,10 +86,9 @@ void split_space(metadata b, size_t s){
 
 int is_valid(void *p){
 	printf("checking if valid pointer\n");
-	printf("list head is at %p\n", list);
 	if(list){
 		if(p > (void *)list && p<sbrk(0)){
-			printf("returning value\n");
+			printf("returning value %p and %p\n",p,get_space(p)->ptr);
 			return (p == (get_space(p))->ptr);
 		}
 	}	
@@ -97,7 +99,7 @@ int is_valid(void *p){
 metadata get_space(void *p){
 	char * temp;
 	temp = p;
-	printf("getting space: %p\n", temp-=sizeof(metadata));
+	printf("metadata: %p\n", temp-=sizeof(metadata));
 	return (p = temp -= sizeof(metadata));
 }
 
@@ -200,12 +202,12 @@ address in memory. IF failed. Return Null*/
 // 2. If we have an initial pointer
 	if(list){
 // 		a. Find first free chunk big enough
-		curr = list;	
 		l = find_first_free(curr,s);
-		if(l){ // still pointing to the head so extend space
+		if(l->free){ 
 			printf("finding first free, at: %p\n",l);
 //			i. If big enough split the chunk
-			if((l->size - s) >= (sizeof(metadata) + 4)){
+			if((l->size - s) > (sizeof(metadata))){
+				printf("we want to split chunks");
 				split_space(l,s);
 			}
 //			ii.  Mark the chunk as used
@@ -214,7 +216,7 @@ address in memory. IF failed. Return Null*/
 			printf("extending the heap\n");
 //			iii. ELSE extend the heap
 			// No block that fits so we need to extend the space
-			l = extend_space(curr,s);	
+			l = extend_space(l,s);	
 			if (!l) // If unsuccessfully extended the heap space
 				return NULL;
 		}
