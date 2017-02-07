@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-O0 -fPIC -g -Wno-deprecated-declarations
+CFLAGS=-O3 -fPIC -g -Wno-deprecated-declarations
 DEPS=my_malloc.h
 
 all: lib

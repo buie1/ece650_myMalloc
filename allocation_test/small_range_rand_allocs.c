@@ -3,7 +3,7 @@
 #include "sys/time.h"
 #include "my_malloc.h"
 
-#define NUM_ITERS    1  //10000
+#define NUM_ITERS    100 //10000
 #define NUM_ITEMS    10000 //10000
 
 #ifdef FF
@@ -57,7 +57,6 @@ int main(int argc, char *argv[])
     malloc_items[1][i].bytes = ((rand() % (max_chunks - min_chunks + 1)) + min_chunks) * chunk_size;
     free_list[i] = i;
   } //for i
-  printf("finished getting malloc items\n");
   i = NUM_ITEMS;
   while (i > 1) {
     i--;

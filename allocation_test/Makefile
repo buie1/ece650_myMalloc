@@ -1,7 +1,7 @@
 CC=gcc
-CFLAGS=-O0 -fPIC -g
+CFLAGS=-O3 -fPIC -g
 DEPS=my_malloc.h
-MALLOC_VERSION=BF
+MALLOC_VERSION=FF
 WDIR=/winhomes/jab165/ece650/ece650_myMalloc
 
 all: equal_size_allocs small_range_rand_allocs large_range_rand_allocs

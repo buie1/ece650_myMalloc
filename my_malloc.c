@@ -11,7 +11,12 @@
 * Functions for Freelist
 *
 *****************************************/
-metadata list = NULL;
+__thread metadata list = NULL;
+//metadata list = NULL;
+pthread_mutex_t extend_mutex;
+pthread_mutex_t split_mutex;
+
+
 /* Function find_first_free: This function searches the metadata for the
 first free block of space that is free */
 metadata find_first_free(metadata start, size_t s ){
@@ -64,6 +69,9 @@ metadata extend_space(metadata curr, size_t s){
 	return(new);
 }
 void split_space(metadata b, size_t s){
+	/*if(b == (metadata)0x66d290){
+		printf("Break here\n");
+	}*/
 	if(b){
 		metadata ll;	
 		ll = (metadata)(b->data + s); // From end of meta data to size of data block
@@ -87,26 +95,24 @@ int is_valid(void *p){
 	//printf("checking if valid pointer\n");
 	if(list){
 		if(p > (void *)list && p<sbrk(0)){
-			//printf("returning value %p and %p\n",p,get_node(p)->ptr);
-			return (p == (get_node(p))->ptr);
+			return (p == (void *)(get_node(p))->ptr);
 		}
 	}	
-	//printf("returning zero\n");
 	return 0;
 }
 metadata get_node(void *p){
 	char * temp;
 	temp = p;
 	//p = temp - sizeof(node) + sizeof(metadata*);
-	p = temp - sizeof(node) + sizeof(metadata);
+	p = temp - sizeof(node) + sizeof(metadata*);
 	//p = temp - sizeof(node);
-	//printf("metadata start@ %p, and data %p \n", temp,p);
-	return p;
+	return (metadata)p;
 }
 metadata merge_space(metadata block){
 	if(block->next){
-		if(block->next == (metadata )0x1){
+		if(block->next == (metadata)0x1){
 			printf("BREAK HERE!\n");
+			return block;
 		}
 		if(block->next->free){
 			// update size
@@ -173,7 +179,8 @@ void free_function(void * ptr){
 		if(l->prev && l->prev->free)
 			//l = merge_space(l->prev);
 		if(l->next)
-			i=0;	//merge_space(l);
+			i=0;	
+			//merge_space(l);
 		else{
 			if(l->prev)
 				l->prev->next = NULL;
@@ -182,26 +189,8 @@ void free_function(void * ptr){
 			brk(l);
 		}
 	}
-/*
-		//	Merge with prev if available
-		if(l->prev || l->next){
-			l = merge_space(l);
-		} else{
-			// If last block release memory
-			// Nothing is next so free the end of the heap
-			if(l->prev){
-				l->prev->next = NULL;
-			}else{
-				// If no more blocks set list to null
-				// THERE ARE NO MORE BLOCKS!
-				list = NULL;
-			}
-			brk(l);
-		}
-	} else{
-		// Do nothing if not a valid address
-	}	*/
 }
+
 void *ff_malloc(size_t size){
 /* Takes in a requested size (size_t) and returns a pointer to the
 address in memory. IF failed. Return Null*/
@@ -266,7 +255,54 @@ void *bf_malloc(size_t size){
 }
 
 void *ts_malloc(size_t size){
-	__thread metadata head = NULL;
+	metadata l;
+	metadata curr;
+	if(list){
+		l = find_best_free(curr,size);
+		if(l){
+			if(l->size >= (sizeof(node) + size)){
+				pthread_mutex_lock(&split_mutex);
+				split_space(l,size);
+				pthread_mutex_unlock(&split_mutex);
+			}
+			l->free = 0;
+		} else{
+			pthread_mutex_lock(&extend_mutex);
+			l = extend_space(l,size);
+			pthread_mutex_unlock(&extend_mutex);
+			if(!l) {return NULL;}
+		}
+	} else {
+		pthread_mutex_lock(&extend_mutex);
+		l = extend_space(NULL,size);
+		pthread_mutex_unlock(&extend_mutex);
+		if(!l){return NULL;}
+		list = l;
+	}
+	return l->data;
+}
+
+void ts_free(void *ptr){
+	metadata l;
+	int i;
+	if(is_valid(ptr)){
+	// Yes,
+	//	Get the block addr, mark it free
+		l = get_node(ptr);
+		l->free = 1;
+		if(l->prev && l->prev->free)
+			//l = merge_space(l->prev);
+		if(l->next)
+			i=0;	//merge_space(l);
+		else{
+			if(l->prev)
+				l->prev->next = NULL;
+			else
+				list = NULL;
+			brk(l);
+		}
+	}
+
 }
 
 void ff_free(void * ptr){
