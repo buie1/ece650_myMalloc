@@ -3,6 +3,9 @@
 #include <unistd.h>
 #include "my_malloc.h"
 #include "pthread.h"
+#include <stdint.h>
+
+
 /*****************************************
 *
 * Functions for Freelist
@@ -13,7 +16,6 @@ metadata list = NULL;
 first free block of space that is free */
 metadata find_first_free(metadata start, size_t s ){
 	metadata b = list;
-	printf("starting fff @ %p, free = %u\n",b,b->free);
 	while (b != NULL){
 		//if(b->free && b->size >= (s + sizeof(metadata))) {
 		if(b->free && b->size >= (s + sizeof(node))) {
@@ -22,18 +24,17 @@ metadata find_first_free(metadata start, size_t s ){
 		if(b->next == NULL){
 			break;
 		}
-		printf("b->next: %p , b->free = %u \n",b,b->free);
 		b = b->next;
 	}
-	printf("returning %p\n",b);
+	//printf("returning %p\n",b);
 	return (b);
 }
 metadata find_best_free(metadata curr, size_t size){
 	metadata l = list;
-	size_t dif = SIZE_MAX;
+	int dif = (int)list->size - (int)size;
 	metadata best = NULL;
 	while(l){
-		if(dif >= (l->size - (size + sizeof(node)))){
+		if(dif >= ((int)l->size - ((int)size + (int)sizeof(node))) && dif > 0 && l->free){
 			best = l;
 		}
 		l = l->next;
@@ -45,12 +46,12 @@ initial creation of heap) and can't find adequate space we want to use
 sbrk to extend the space on our list and add a new space to the end of
 our list */
 metadata extend_space(metadata curr, size_t s){
+	int heapsize;
 	metadata new;
-	//new = sbrk(sizeof(metadata) + s);
-	new = sbrk(sizeof(node) + s);
-	printf("addr of new: %p\n",new);
-	if(new == (void *)-1)
-		// as long as this doesn't fail we created more heap space
+	new = sbrk(0);
+	heapsize = (int)(uintptr_t)sbrk(sizeof(struct node) + s);
+	//printf("addr of new: %p\n",new);
+	if(heapsize < 0)
 		return NULL;
 	new->size = s;
 	new->next = NULL;
@@ -72,52 +73,66 @@ void split_space(metadata b, size_t s){
 		ll->free = 1;
 		ll->ptr = ll->data;
 		b->size = s;
+		b->free = 0;
 		b->next = ll;
 		if(ll->next){
 			ll->next->prev = ll;
 		}
 	} else{
+		printf("split space has null pointer\n");
 		// We can't split a list thats NULL!
 	}
 }
 int is_valid(void *p){
-	printf("checking if valid pointer\n");
+	//printf("checking if valid pointer\n");
 	if(list){
 		if(p > (void *)list && p<sbrk(0)){
-			printf("returning value %p and %p\n",p,get_space(p)->ptr);
-			return (p == (get_space(p))->ptr);
+			//printf("returning value %p and %p\n",p,get_node(p)->ptr);
+			return (p == (get_node(p))->ptr);
 		}
 	}	
-	printf("returning zero\n");
+	//printf("returning zero\n");
 	return 0;
 }
-metadata get_space(void *p){
+metadata get_node(void *p){
 	char * temp;
-	temp = (p - sizeof(node) + sizeof(char **));
-	printf("metadata: %p\n", temp);
-	return temp;
+	temp = p;
+	//p = temp - sizeof(node) + sizeof(metadata*);
+	p = temp - sizeof(node) + sizeof(metadata);
+	//p = temp - sizeof(node);
+	//printf("metadata start@ %p, and data %p \n", temp,p);
+	return p;
 }
 metadata merge_space(metadata block){
-	if(block->next && block->next->free){
-		// update size
-		block->size += sizeof(node) + block->next->size;
-		//update ptr
-		block->next = block->next->next;
-		// may need to update next blocks previous ptr
-		if(block->next){	
-			block->next->prev = block;
+	if(block->next){
+		if(block->next == (metadata )0x1){
+			printf("BREAK HERE!\n");
+		}
+		if(block->next->free){
+			// update size
+			block->size += sizeof(node) + block->next->size;
+			//update ptr
+			block->next = block->next->next;
+			// may need to update next blocks previous ptr
+			if(block->next){	
+				block->next->prev = block;
+			}	
 		}
 	}
+	/*
 	// Check if the previous is also free
-	if(block->prev && block->prev->free){
-		metadata tmp = block->prev;
-		tmp->size += sizeof(node) + block->size;
-		tmp->next = block->next;
-		if(tmp->next){
-			tmp->next->prev = tmp;
-		}	
+	if(block->prev){
+		metadata tmp;
+		if(block->prev->free){
+			tmp = block->prev;
+			tmp->size += sizeof(node) + block->size;
+			tmp->next = block->next;
+			if(tmp->next){
+				tmp->next->prev = tmp;
+			}	
+		}
 		block = tmp;
-	}
+	}*/
 	return block;
 }
 /*****************************************
@@ -147,19 +162,29 @@ unsigned long get_data_segment_free_space_size(){
 *****************************************/
 void free_function(void * ptr){
 	// Do we have a valid pointer?
-	printf("Attempting to free at addr: %p\n", ptr);
+	//printf("Attempting to free at addr: %p\n", ptr);
 	metadata l;
+	int i;
 	if(is_valid(ptr)){
 	// Yes,
 	//	Get the block addr, mark it free
-		l = get_space(ptr);
+		l = get_node(ptr);
 		l->free = 1;
-		//	Merge with prev if available
-		if(l->prev && l->prev->free){
-			l = merge_space(l);
+		if(l->prev && l->prev->free)
+			//l = merge_space(l->prev);
+		if(l->next)
+			i=0;	//merge_space(l);
+		else{
+			if(l->prev)
+				l->prev->next = NULL;
+			else
+				list = NULL;
+			brk(l);
 		}
-		// Merge with next
-		if(l->next){
+	}
+/*
+		//	Merge with prev if available
+		if(l->prev || l->next){
 			l = merge_space(l);
 		} else{
 			// If last block release memory
@@ -175,7 +200,7 @@ void free_function(void * ptr){
 		}
 	} else{
 		// Do nothing if not a valid address
-	}	
+	}	*/
 }
 void *ff_malloc(size_t size){
 /* Takes in a requested size (size_t) and returns a pointer to the
@@ -183,25 +208,22 @@ address in memory. IF failed. Return Null*/
 // 1. Get the requested size (and align?)
 	metadata l;
 	metadata curr;
-	//printf("try to malloc size of %lu + metadata: %lu \n",size,sizeof(node));
-	printf("try to malloc size of %lu + metadata: %lu \n",size,sizeof(node));
 // 2. If we have an initial pointer
 	if(list){
-		printf("list isn't empty...\n\n");
+		//printf("list isn't empty...\n\n");
 // 		a. Find first free chunk big enough
 		l = find_first_free(curr,size);
 		if(l->free){ 
-			printf("finding first free, at: %p\n",l);
+			//printf("finding first free, at: %p\n",l);
 //			i. If big enough split the chunk
 			//if(l->size > (sizeof(metadata) + size)){
 			if(l->size > (sizeof(node) + size)){
-				printf("we want to split chunks");
+				//printf("we want to split chunks\n");
 				split_space(l,size);
 			}
 //			ii.  Mark the chunk as used
 			l->free = 0;
 		} else{
-			printf("no free in list, extending the heap\n");
 //			iii. ELSE extend the heap
 			// No block that fits so we need to extend the space
 			l = extend_space(l,size);	
@@ -213,35 +235,33 @@ address in memory. IF failed. Return Null*/
 		l = extend_space(NULL,size);
 		if(!l)
 			return NULL;
-		printf("starting list, head @ %p, list->free = %u\n", l,l->free);
+		//printf("starting list, head @ %p, list->free = %u\n", l,l->free);
 		list = l;
 	}
-	printf("address of l: %p, and data at: %p \n",l,l->data);
+	//printf("address of l: %p, and data at: %p \n",l,l->data);
 	return(l->data);
 }
 void *bf_malloc(size_t size){
 	metadata l;
 	metadata curr;
-	size_t s;
-	s = size;
 	if(list){
-		curr = list;
-		l = find_best_free(curr,s);
+		//curr = list;
+		l = find_best_free(curr,size);
 		if(l){
-			if((l->size - s) >= (sizeof(node))){
-				split_space(l,s);
+			if(l->size  >= (sizeof(node) + size)){
+				split_space(l,size);
 			}
 			l->free = 0;
 		} else{
-			l = extend_space(curr,s);
+			l = extend_space(l,size);
 			if(!l) {return NULL;}
 		}
 	} else {
-		l = extend_space(NULL,s);
+		l = extend_space(NULL,size);
 		if(!l){ return NULL;}
 		list = l;
 	}
-	printf("address of l: %p, and data at: %p \n",l,l->data);
+	//printf("address of l: %p, and data at: %p \n",l,l->data);
 	return l->data;
 }
 void ff_free(void * ptr){

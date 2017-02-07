@@ -2,7 +2,7 @@ CC=gcc
 CFLAGS=-O0 -fPIC -g
 DEPS=my_malloc.h
 MALLOC_VERSION=BF
-WDIR=/Users/jonbuie/Desktop/college_Folder/Duke/sp17/ece650/homeworkDocs/hw1_myMalloc/general_test/
+WDIR=/winhomes/jab165/ece650/ece650_myMalloc
 
 all: equal_size_allocs small_range_rand_allocs large_range_rand_allocs
 

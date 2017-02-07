@@ -26,7 +26,7 @@ metadata find_best_free(metadata curr, size_t size);
 // metadata functions for free
 int is_valid(void *p);
 metadata merge_space(metadata block);
-metadata get_space(void *p);
+metadata get_node(void *p);
 
 
 /*****************************************
