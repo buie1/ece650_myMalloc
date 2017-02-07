@@ -3,22 +3,20 @@
 #include <unistd.h>
 #include "my_malloc.h"
 #include "pthread.h"
-
-
 /*****************************************
 *
 * Functions for Freelist
 *
 *****************************************/
 metadata list = NULL;
-
 /* Function find_first_free: This function searches the metadata for the
 first free block of space that is free */
 metadata find_first_free(metadata start, size_t s ){
 	metadata b = list;
-	printf("starting fff @ %p \n",b);
+	printf("starting fff @ %p, free = %u\n",b,b->free);
 	while (b != NULL){
-		if(b->free && b->size >= (s + sizeof(metadata))) {
+		//if(b->free && b->size >= (s + sizeof(metadata))) {
+		if(b->free && b->size >= (s + sizeof(node))) {
 			return b;
 		}
 		if(b->next == NULL){
@@ -30,28 +28,28 @@ metadata find_first_free(metadata start, size_t s ){
 	printf("returning %p\n",b);
 	return (b);
 }
-
 metadata find_best_free(metadata curr, size_t size){
 	metadata l = list;
 	size_t dif = SIZE_MAX;
 	metadata best = NULL;
 	while(l){
-		if(dif >= (l->size - (size + sizeof(metadata)))){
+		if(dif >= (l->size - (size + sizeof(node)))){
 			best = l;
 		}
 		l = l->next;
 	}
 	return best;
 }
-
 /*Function extend_space: If we iterate through our free list (or
 initial creation of heap) and can't find adequate space we want to use
 sbrk to extend the space on our list and add a new space to the end of
 our list */
 metadata extend_space(metadata curr, size_t s){
 	metadata new;
-	new = sbrk(0);
-	if(sbrk(sizeof(metadata) + s) == (void *)-1)
+	//new = sbrk(sizeof(metadata) + s);
+	new = sbrk(sizeof(node) + s);
+	printf("addr of new: %p\n",new);
+	if(new == (void *)-1)
 		// as long as this doesn't fail we created more heap space
 		return NULL;
 	new->size = s;
@@ -64,12 +62,11 @@ metadata extend_space(metadata curr, size_t s){
 	new->free = 0;
 	return(new);
 }
-
 void split_space(metadata b, size_t s){
 	if(b){
 		metadata ll;	
 		ll = (metadata)(b->data + s); // From end of meta data to size of data block
-		ll->size = b->size - s - sizeof(metadata);
+		ll->size = b->size - s - sizeof(node);
 		ll->next = b->next;
 		ll->prev = b; 	
 		ll->free = 1;
@@ -83,7 +80,6 @@ void split_space(metadata b, size_t s){
 		// We can't split a list thats NULL!
 	}
 }
-
 int is_valid(void *p){
 	printf("checking if valid pointer\n");
 	if(list){
@@ -95,18 +91,16 @@ int is_valid(void *p){
 	printf("returning zero\n");
 	return 0;
 }
-
 metadata get_space(void *p){
 	char * temp;
-	temp = p;
-	printf("metadata: %p\n", temp-=sizeof(metadata));
-	return (p = temp -= sizeof(metadata));
+	temp = (p - sizeof(node) + sizeof(char **));
+	printf("metadata: %p\n", temp);
+	return temp;
 }
-
 metadata merge_space(metadata block){
 	if(block->next && block->next->free){
 		// update size
-		block->size += sizeof(metadata) + block->next->size;
+		block->size += sizeof(node) + block->next->size;
 		//update ptr
 		block->next = block->next->next;
 		// may need to update next blocks previous ptr
@@ -117,7 +111,7 @@ metadata merge_space(metadata block){
 	// Check if the previous is also free
 	if(block->prev && block->prev->free){
 		metadata tmp = block->prev;
-		tmp->size += sizeof(metadata) + block->size;
+		tmp->size += sizeof(node) + block->size;
 		tmp->next = block->next;
 		if(tmp->next){
 			tmp->next->prev = tmp;
@@ -126,19 +120,15 @@ metadata merge_space(metadata block){
 	}
 	return block;
 }
-
-
 /*****************************************
 *
 * Functions for fragmentation (allocated space)
 *
 *****************************************/
-
 unsigned long get_data_segment_size(){
 	unsigned long seg = sbrk(0)-(void *)list;
 	return seg;
 }
-
 unsigned long get_data_segment_free_space_size(){
 	unsigned long  ans = 0;
 	metadata l = list;
@@ -150,13 +140,11 @@ unsigned long get_data_segment_free_space_size(){
 	}
 	return ans;
 }
-
 /*****************************************
 *
 * Functions for Malloc/ Free
 *
 *****************************************/
-
 void free_function(void * ptr){
 	// Do we have a valid pointer?
 	printf("Attempting to free at addr: %p\n", ptr);
@@ -189,49 +177,48 @@ void free_function(void * ptr){
 		// Do nothing if not a valid address
 	}	
 }
-
 void *ff_malloc(size_t size){
 /* Takes in a requested size (size_t) and returns a pointer to the
 address in memory. IF failed. Return Null*/
 // 1. Get the requested size (and align?)
 	metadata l;
 	metadata curr;
-	size_t s;
-	s = size;
-	printf("need to malloc size of %lu + metadata: %lu \n",size,sizeof(metadata));
+	//printf("try to malloc size of %lu + metadata: %lu \n",size,sizeof(node));
+	printf("try to malloc size of %lu + metadata: %lu \n",size,sizeof(node));
 // 2. If we have an initial pointer
 	if(list){
+		printf("list isn't empty...\n\n");
 // 		a. Find first free chunk big enough
-		l = find_first_free(curr,s);
+		l = find_first_free(curr,size);
 		if(l->free){ 
 			printf("finding first free, at: %p\n",l);
 //			i. If big enough split the chunk
-			if((l->size - s) > (sizeof(metadata))){
+			//if(l->size > (sizeof(metadata) + size)){
+			if(l->size > (sizeof(node) + size)){
 				printf("we want to split chunks");
-				split_space(l,s);
+				split_space(l,size);
 			}
 //			ii.  Mark the chunk as used
 			l->free = 0;
 		} else{
-			printf("extending the heap\n");
+			printf("no free in list, extending the heap\n");
 //			iii. ELSE extend the heap
 			// No block that fits so we need to extend the space
-			l = extend_space(l,s);	
+			l = extend_space(l,size);	
 			if (!l) // If unsuccessfully extended the heap space
 				return NULL;
 		}
 	} else{
 		// First time we've allocated
-		l = extend_space(NULL,s);
+		l = extend_space(NULL,size);
 		if(!l)
 			return NULL;
-		printf("starting list, head of list is at %p\n", l);
+		printf("starting list, head @ %p, list->free = %u\n", l,l->free);
 		list = l;
 	}
 	printf("address of l: %p, and data at: %p \n",l,l->data);
 	return(l->data);
 }
-
 void *bf_malloc(size_t size){
 	metadata l;
 	metadata curr;
@@ -241,7 +228,7 @@ void *bf_malloc(size_t size){
 		curr = list;
 		l = find_best_free(curr,s);
 		if(l){
-			if((l->size - s) >= (sizeof(metadata))){
+			if((l->size - s) >= (sizeof(node))){
 				split_space(l,s);
 			}
 			l->free = 0;
@@ -257,12 +244,9 @@ void *bf_malloc(size_t size){
 	printf("address of l: %p, and data at: %p \n",l,l->data);
 	return l->data;
 }
-
 void ff_free(void * ptr){
 	free_function(ptr);
 }
 void bf_free(void * ptr){
 	free_function(ptr);
 }
-
-

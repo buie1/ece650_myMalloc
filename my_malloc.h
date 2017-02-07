@@ -14,7 +14,7 @@ struct node{
 	int free;
 	void *ptr; // pointer to the field data 
 	char data[1]; // array pointer indicates the end of meta-data
-};
+} node;
 
 // metadata functions for malloc functions 
 metadata find_first_free(metadata curr, size_t size); // DONE
