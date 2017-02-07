@@ -250,15 +250,15 @@ void *bf_malloc(size_t size){
 		if(!l){ return NULL;}
 		list = l;
 	}
-	//printf("address of l: %p, and data at: %p \n",l,l->data);
 	return l->data;
 }
 
 void *ts_malloc(size_t size){
+	//printf("address of l: %p, and data at: %p \n",l,l->data);
 	metadata l;
 	metadata curr;
 	if(list){
-		l = find_best_free(curr,size);
+		l= find_best_free(curr,size);
 		if(l){
 			if(l->size >= (sizeof(node) + size)){
 				pthread_mutex_lock(&split_mutex);
