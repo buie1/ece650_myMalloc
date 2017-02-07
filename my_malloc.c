@@ -264,6 +264,11 @@ void *bf_malloc(size_t size){
 	//printf("address of l: %p, and data at: %p \n",l,l->data);
 	return l->data;
 }
+
+void *ts_malloc(size_t size){
+	__thread metadata head = NULL;
+}
+
 void ff_free(void * ptr){
 	free_function(ptr);
 }
